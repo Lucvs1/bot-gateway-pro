@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(cuid())
+  discordId         String    @unique(map: "user_discord_id_unique")
+  discordUsername   String?
+  email             String?
+  
+  orders            Order[]
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastPurchaseAt    DateTime?
+  
+  totalPurchases    Int       @default(0)
+  totalSpent        Decimal   @default(0) @db.Decimal(10, 2)
+  
+  @@map("users")
+}
+
+/// Produtos digitais disponíveis para venda
+model Product {
+  id                String    @id @default(cuid())
+  name              String
+  description       String?
+  priceBRL          Decimal   @db.Decimal(10, 2)
+  priceUSD          Decimal   @db.Decimal(10, 2)
+  
+  downloadUrl       String?
+  repositoryUrl     String?
+  licenseKeyTemplate String?
+  
+  category          String?   @default("general")
+  tags              String[]
+  
+  isActive          Boolean   @default(true)
+  stock             Int?
+  
+  thumbnailUrl      String?
+  imageUrl          String?
+  
+  orders            Order[]
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([category])
+  @@index([isActive])
+  @@map("products")
+}
+
+/// Pedidos/Transações de compra
+model Order {
+  id                String    @id @default(cuid())
+  
+  gatewayOrderId    String    @unique(map: "order_gateway_id_unique")
+  gateway           PaymentGateway
+  
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  
+  amount            Decimal   @db.Decimal(10, 2)
+  currency          String    @default("BRL")
+  
+  status            OrderStatus @default(PENDING)
+  
+  pixCode           String?
+  pixQrCode         String?
+  checkoutUrl       String?
+  
+  deliveredAt       DateTime?
+  deliveryMethod     DeliveryMethod?
+  licenseKey        String?
+  
+  discordChannelId  String?
+  discordGuildId    String?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  expiresAt         DateTime?
+  
+  @@index([userId])
+  @@index([productId])
+  @@index([status])
+  @@index([gateway])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+/// Log de eventos de webhook para auditoria
+model WebhookLog {
+  id                String    @id @default(cuid())
+  gateway           PaymentGateway
+  eventType         String
+  orderId           String?
+  payload           Json
+  processed         Boolean   @default(false)
+  errorMessage      String?
+  
+  createdAt         DateTime  @default(now())
+  
+  @@index([gateway])
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("webhook_logs")
+}
+
+// ==================== ENUMS ====================
+
+enum PaymentGateway {
+  MERCADO_PAGO
+  STRIPE
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  DELIVERED
+  CANCELLED
+  EXPIRED
+  REFUNDED
+  FAILED
+}
+
+enum DeliveryMethod {
+  DOWNLOAD
+  REPOSITORY
+  LICENSE_KEY
+  MANUAL
+}
